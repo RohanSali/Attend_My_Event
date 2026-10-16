@@ -4,7 +4,7 @@
 
 AttendMyEvent is a location-aware event discovery and invitation web application. People can publish events with venue, schedule, visibility, registration instructions, and optional host-provided fee/payment information. Other users can discover eligible public events through a map and event list, inspect event status, open details, and navigate to a venue.
 
-> **Project status:** Product specification and setup guide. Confirm the repository's actual filenames, scripts, environment variables, and installed dependencies before treating example commands as exact. This document does not claim that every proposed feature is already implemented.
+> **Project status:** A first working slice is implemented: visitors can browse, search, and filter events, and hosts can publish an event through the UI. FastAPI validates event details and saves them to a local SQLite database. Authentication, maps, registration, and the larger features described below are not implemented yet.
 
 ## Contents
 
@@ -19,7 +19,8 @@ AttendMyEvent is a location-aware event discovery and invitation web application
 - [Local setup](#local-setup)
 - [Running the application](#running-the-application)
 - [Firebase and Firestore setup](#firebase-and-firestore-setup)
-- [API conventions and sample routes](#api-conventions-and-sample-routes)
+- [Implemented API](#implemented-api)
+- [Future API scope](#future-api-scope)
 - [Data and file-storage notes](#data-and-file-storage-notes)
 - [Testing and quality checks](#testing-and-quality-checks)
 - [Security checklist](#security-checklist)
@@ -75,9 +76,9 @@ Hosts can create an event in a flexible editor. The product keeps core discovery
 |---|---|---|
 | Frontend | ReactJS + Vite + Tailwind CSS | Pages, reusable components, responsive layouts and styling |
 | Backend | FastAPI (Python) | API, validation, authorization, business logic |
-| Authentication | Firebase Authentication | User sign-in and identity |
-| Database | Cloud Firestore | User profiles, events, registrations, notifications |
-| Map | To be selected | Map display, markers, focusing and directions |
+| Authentication | Not implemented yet; Firebase Authentication is a future option | User sign-in and identity |
+| Database | SQLite for the current event prototype; Cloud Firestore is a future option | Event records |
+| Map | Not implemented yet | Map display, markers, focusing and directions |
 | Geocoding | To be selected | Address-to-coordinate conversion |
 | File storage | To be confirmed | Event images, profile photos, payment QR images |
 | Local folder | `data/` | Development data or explicitly documented local files |
@@ -97,15 +98,15 @@ If Tailwind is already working, do not reinstall or replace its configuration ju
 
 | File/location | Responsibility |
 |---|---|
-| `src/index.css` (or the CSS file imported by `main.jsx`) | Tailwind entry point, global CSS variables, base document styles, font defaults and global resets |
+| `src/index.css` (or the CSS file imported by `main.jsx`) | Tailwind entry point; keep component styling in JSX utility classes |
 | `tailwind.config.js` | Tailwind v3 content paths and theme extensions; do not assume this exact config is required for Tailwind v4 |
-| `src/styles/` | Optional shared theme/token files or global overrides; avoid duplicating token definitions |
+| `src/styles/` | Optional global styles only when needed; avoid moving utility-styled components back into standalone CSS |
 | `src/components/common/` | Reusable Button, Input, Badge, Card, Modal, Toast, and loading components with consistent style variants |
 | `src/components/layout/` | Navbar, page container, responsive shells and navigation layouts |
 | `src/features/**/` | Feature-specific component markup and Tailwind utility classes, e.g. dashboard, events, profile and notifications |
 | `UI.md` | Source of truth for the visual rules, palette, spacing, component variants and page layouts |
 
-Keep most component styling in Tailwind utility classes in the JSX. Use reusable components for repeated patterns. Avoid adding a separate CSS file for every component unless the styling is complex, depends on a third-party library, or is awkward to express with utilities.
+Keep component styling in Tailwind utility classes in the JSX. Use reusable components for repeated patterns. Avoid adding standalone CSS for component styling unless it is complex, depends on a third-party library, or is awkward to express with utilities.
 
 ### Tailwind CSS v4 entry stylesheet example
 
@@ -255,6 +256,23 @@ FastAPI must verify the Firebase ID token and derive the user UID from the verif
 ## Suggested directory structure
 
 Adapt this proposal to the files that already exist; do not delete or rename working files merely to match the example.
+
+### Current frontend structure
+
+The implemented event dashboard is split by responsibility:
+
+```text
+frontend/src/
+├── api/events.js              # Event GET and POST requests
+├── components/                # Header, footer, banner, event list, cards, and form
+├── constants/events.js        # Event categories and form defaults
+├── utils/events.js            # Event ordering and date formatting
+├── App.jsx                    # Page state and component composition
+├── index.css                  # Tailwind CSS entry point
+└── main.jsx                   # React application entry point
+```
+
+Component styling uses Tailwind utility classes in JSX; `index.css` only imports Tailwind.
 
 ```text
 AttendMyEvent/
@@ -444,7 +462,7 @@ Confirm that Tailwind CSS is installed and identify its major version before edi
 
 If the existing frontend is at the repository root rather than `frontend/`, run the commands in that directory instead. Keep `package-lock.json` committed if npm is the chosen package manager.
 
-### 3. Create the backend virtual environment
+### 3. Create and install the backend environment
 
 From the repository root:
 
@@ -453,7 +471,7 @@ From the repository root:
 cd backend
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
 **macOS/Linux**
@@ -461,54 +479,25 @@ python -m pip install --upgrade pip
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-```
-
-### 4. Install backend dependencies
-
-If the project uses `requirements.txt`:
-
-```bash
 python -m pip install -r requirements.txt
 ```
 
-If the project uses `pyproject.toml` or another dependency manager, follow that project's existing instructions. At minimum, the backend needs compatible versions of FastAPI, an ASGI server such as Uvicorn, Pydantic, and the selected Firebase Admin SDK integration.
-
-### 5. Configure environment files
-
-- Create the frontend `.env` from `.env.example`.
-- Create the backend `.env` from `.env.example`.
-- Add Firebase client configuration to the frontend.
-- Configure Firebase Admin authentication for the backend using a secure local/deployment method.
-- Add a map provider configuration only after choosing the provider.
-- Verify `.env` files are ignored by Git.
-
-### 6. Verify Firebase setup
-
-- Enable the required sign-in provider(s) in Firebase Authentication.
-- Create/enable Cloud Firestore in the correct project.
-- Apply and test Firestore Security Rules.
-- Configure the backend's Firebase Admin SDK.
-- Confirm frontend and backend point to the same intended Firebase project.
-
-### 7. Start the backend
+### 4. Start the backend
 
 From `backend/`, with the virtual environment active:
 
 ```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-This command assumes the entry point is `app/main.py` and contains an ASGI object named `app`. If the current project uses another module path, adjust the command to match it.
+The API stores events in `backend/events.sqlite3`. Set `EVENT_DATABASE_PATH` to use another SQLite file. `CORS_ORIGINS` accepts a comma-separated list of allowed frontend origins; its default allows the local Vite server.
 
-Useful local endpoints, if configured:
-- API health: `http://127.0.0.1:8000/api/v1/health`
-- Interactive API docs: `http://127.0.0.1:8000/docs`
-- Alternative API docs: `http://127.0.0.1:8000/redoc`
+Available endpoints:
+- Health: `http://127.0.0.1:8000/health`
+- Event list: `http://127.0.0.1:8000/api/events`
+- API documentation: `http://127.0.0.1:8000/docs`
 
-Do not expose interactive API documentation publicly in production unless that is an intentional, secured choice.
-
-### 8. Start the frontend
+### 5. Start the frontend
 
 In a second terminal:
 
@@ -517,17 +506,7 @@ cd frontend
 npm run dev
 ```
 
-Vite commonly serves the development frontend at `http://localhost:5173`. Use the exact address printed in the terminal.
-
-### 9. Verify the connection
-
-- Confirm the frontend loads.
-- Confirm the backend health endpoint responds.
-- Confirm CORS allows the local frontend origin.
-- Confirm the frontend API base URL points to the backend.
-- Sign in and inspect the browser console/network panel for authentication errors.
-- Test event queries with public data only.
-- Confirm private and draft events are not visible to a second user.
+Vite proxies API and health requests to `http://127.0.0.1:8000`. When serving the frontend separately from the backend, set `VITE_API_BASE_URL` to the API origin and set the backend's `CORS_ORIGINS` to include the frontend origin.
 
 ---
 
@@ -539,7 +518,7 @@ For day-to-day development, run the frontend and backend in separate terminals.
 ```bash
 cd backend
 # Activate .venv first
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 **Terminal B — Frontend**
@@ -560,14 +539,25 @@ npm run preview
 
 Run linting or tests only if those scripts are configured in the project.
 
-### Common backend commands
+### Backend endpoints
 
-```bash
-# Start development server
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+- `GET /health` — backend health check.
+- `GET /api/events` — all events, with upcoming events first.
+- `POST /api/events` — create an event and return it with HTTP 201.
 
-# Example test command, if pytest is installed and tests are configured
-python -m pytest
+An event requires `title` (3–100 characters), `category`, `venue` (2–160 characters), and timezone-aware `starts_at` / `ends_at` timestamps. `ends_at` must be after `starts_at`. `description` is optional (up to 2,000 characters). Invalid inputs receive HTTP 422 responses.
+
+Example event body:
+
+```json
+{
+  "title": "Sunday morning run",
+  "category": "Sports & outdoors",
+  "venue": "Riverside Park",
+  "description": "A relaxed 5 km loop. All paces welcome.",
+  "starts_at": "2026-10-18T07:00:00+05:30",
+  "ends_at": "2026-10-18T08:00:00+05:30"
+}
 ```
 
 ---
@@ -613,9 +603,9 @@ This is a proposal, not a claim that these collections already exist. Confirm qu
 
 ---
 
-## API conventions and sample routes
+## Future API scope
 
-The proposed API prefix is `/api/v1`. Actual route names should match the implementation.
+The following routes are future scope, not part of the current implementation. The current API is documented above and uses `/api/events`.
 
 | Method | Example route | Purpose |
 |---|---|---|

@@ -1,0 +1,25 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    environment:
+      EVENT_DATABASE_PATH: /app/data/events.sqlite3
+    volumes:
+      - backend_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  backend_data:

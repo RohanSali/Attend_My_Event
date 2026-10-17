@@ -494,7 +494,7 @@ The API stores events in `backend/events.sqlite3`. Set `EVENT_DATABASE_PATH` to 
 
 Available endpoints:
 - Health: `http://127.0.0.1:8000/health`
-- Event list: `http://127.0.0.1:8000/api/events`
+- Event list: `http://127.0.0.1:8000/events`
 - API documentation: `http://127.0.0.1:8000/docs`
 
 ### 5. Start the frontend
@@ -542,8 +542,8 @@ Run linting or tests only if those scripts are configured in the project.
 ### Backend endpoints
 
 - `GET /health` — backend health check.
-- `GET /api/events` — all events, with upcoming events first.
-- `POST /api/events` — create an event and return it with HTTP 201.
+- `GET /events` — all events, with upcoming events first.
+- `POST /events` — create an event and return it with HTTP 201. The frontend and Nginx expose this at `/api/events` by stripping the `/api` prefix before forwarding the request.
 
 An event requires `title` (3–100 characters), `category`, `venue` (2–160 characters), and timezone-aware `starts_at` / `ends_at` timestamps. `ends_at` must be after `starts_at`. `description` is optional (up to 2,000 characters). Invalid inputs receive HTTP 422 responses.
 
@@ -605,7 +605,7 @@ This is a proposal, not a claim that these collections already exist. Confirm qu
 
 ## Future API scope
 
-The following routes are future scope, not part of the current implementation. The current API is documented above and uses `/api/events`.
+The following routes are future scope, not part of the current implementation. The current backend API is documented above and uses `/events`.
 
 | Method | Example route | Purpose |
 |---|---|---|

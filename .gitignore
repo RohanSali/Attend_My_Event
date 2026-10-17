@@ -5,3 +5,12 @@
 
 frontend/.env
 backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+
+# SQLite databases
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal

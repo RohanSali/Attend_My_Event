@@ -17,16 +17,11 @@ DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="AttendMyEvent API", version="1.0.0")
 
-allowed_origins = [
-    origin.strip()
-    for origin in os.getenv(
-        "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
-    ).split(",")
-    if origin.strip()
-]
+CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:5173")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=[ CORS_ORIGIN ],
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )

@@ -98,7 +98,7 @@ def health():
     return {"success": "ok"}
 
 
-@app.get("/api/events", response_model=list[Event])
+@app.get("/events", response_model=list[Event])
 def list_events():
     now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
     with connect_database() as connection:
@@ -117,7 +117,7 @@ def list_events():
     return [dict(row) for row in rows]
 
 
-@app.post("/api/events", response_model=Event, status_code=status.HTTP_201_CREATED)
+@app.post("/events", response_model=Event, status_code=status.HTTP_201_CREATED)
 def create_event(event: EventCreate):
     created_at = datetime.now(timezone.utc)
     event_id = str(uuid4())

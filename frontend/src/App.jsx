@@ -7,7 +7,6 @@ import SiteHeader from './components/SiteHeader.jsx'
 import WelcomeBanner from './components/WelcomeBanner.jsx'
 import { CATEGORIES, EMPTY_EVENT_FORM } from './constants/events.js'
 import { sortEvents } from './utils/events.js'
-import OfferPalate from './components/OfferPalate.jsx'
 
 function App() {
   const [events, setEvents] = useState([])
@@ -99,7 +98,6 @@ function App() {
       <div className="mx-auto w-[calc(100%-2rem)] max-w-[1180px] text-[#17212b] sm:w-[calc(100%-2.5rem)]">
         <SiteHeader />
         <main>
-          <OfferPalate />
           <WelcomeBanner />
           <section
             className="my-9 grid items-start gap-7 max-[850px]:grid-cols-[minmax(0,1fr)_310px] max-[850px]:gap-[18px] max-[680px]:grid-cols-1 max-[680px]:gap-3 max-[680px]:my-7"

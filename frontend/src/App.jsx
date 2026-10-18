@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createEvent, getEvents } from './api/events.js'
 import CreateEventForm from './components/CreateEventForm.jsx'
+import EventIdeaCard from './components/EventIdeaCard.jsx'
 import EventsSection from './components/EventsSection.jsx'
 import SiteFooter from './components/SiteFooter.jsx'
 import SiteHeader from './components/SiteHeader.jsx'
@@ -101,6 +102,7 @@ function App() {
         <main>
           <TempCompo />
           <WelcomeBanner />
+          <EventIdeaCard />
           <section
             className="my-9 grid items-start gap-7 max-[850px]:grid-cols-[minmax(0,1fr)_310px] max-[850px]:gap-[18px] max-[680px]:grid-cols-1 max-[680px]:gap-3 max-[680px]:my-7"
             id="explore"

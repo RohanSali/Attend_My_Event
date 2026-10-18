@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.events import router as events_router
+from api.ideas import router as ideas_router
 from database import initialize_database
 
 
@@ -29,6 +30,7 @@ app.add_middleware(
 )
 
 app.include_router(events_router)
+app.include_router(ideas_router)
 
 
 @app.get("/")

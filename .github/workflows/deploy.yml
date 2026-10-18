@@ -175,11 +175,42 @@ jobs:
           # Deploy the updated containers.
           docker compose -f compose.prod.yaml up -d --remove-orphans
 
-          # Validate the Nginx configuration.
+          # Validate the Nginx configuration before reloading.
+          echo "Validating Nginx configuration..."
           docker compose -f compose.prod.yaml exec -T proxy nginx -t
 
-          # Reload Nginx to apply the current configuration.
+          # Reload Nginx so it picks up the current upstream addresses.
+          echo "Reloading application Nginx..."
           docker compose -f compose.prod.yaml exec -T proxy nginx -s reload
+
+          echo "Nginx reload command completed."
+
+
+          # Verify that the application proxy is responding.
+          echo "Checking application homepage..."
+
+          curl --fail --silent --show-error \
+            --retry 5 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            --retry-all-errors \
+            http://127.0.0.1:8083/ \
+            -o /dev/null
+
+          echo "Homepage check passed."
+
+          # Verify that the backend is reachable through the application proxy.
+          echo "Checking backend API..."
+
+          curl --fail --silent --show-error \
+            --retry 5 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            --retry-all-errors \
+            http://127.0.0.1:8083/api/ \
+            -o /dev/null
+
+          echo "Backend API check passed."
 
           # Remove unused Docker images
           docker image prune -f

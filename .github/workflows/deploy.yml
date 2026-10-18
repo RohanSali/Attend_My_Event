@@ -196,10 +196,10 @@ jobs:
             http://127.0.0.1:8083/api/ \
             -o /dev/null
 
-          # Keep the five newest distinct image IDs per application repository.
+          # Keep the three newest distinct image IDs per application repository.
           cleanup_old_images() {
             local repository="$1"
-            local keep=5
+            local keep=3
             local image_id
             local count
             local -a image_ids=()

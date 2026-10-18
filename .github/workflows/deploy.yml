@@ -216,8 +216,15 @@ jobs:
           echo "========== STEP 4: VALIDATE NGINX =========="
 
           docker compose -f compose.prod.yaml exec -T proxy nginx -t
+          NGINX_TEST_EXIT_CODE=$?
 
+          echo "Nginx validation command returned: $NGINX_TEST_EXIT_CODE"
           echo "MARKER 1: Nginx configuration validation completed."
+
+          if [ "$NGINX_TEST_EXIT_CODE" -ne 0 ]; then
+              echo "ERROR: Nginx configuration validation failed."
+              exit "$NGINX_TEST_EXIT_CODE"
+          fi
 
           echo "========== STEP 5: RELOAD NGINX =========="
 
@@ -331,4 +338,24 @@ jobs:
           echo "Deployed commit: $IMAGE_TAG"
           echo "=================================================="
           REMOTE
+          set +e
+
+          {
+              printf 'export IMAGE_PREFIX=%q\n' "$IMAGE_PREFIX"
+              printf 'export IMAGE_TAG=%q\n' "$IMAGE_TAG"
+              printf 'export GHCR_USER=%q\n' "$GHCR_USER"
+              printf 'export GHCR_TOKEN=%q\n' "$GHCR_TOKEN"
+
+              cat <<'REMOTE'
+          # Keep your complete existing remote script here.
+          REMOTE
           } | ssh attend-my-event-server "bash -s"
+
+          SSH_EXIT_CODE=$?
+
+          echo "Remote SSH deployment exited with code: $SSH_EXIT_CODE"
+
+          if [ "$SSH_EXIT_CODE" -ne 0 ]; then
+              echo "ERROR: Remote deployment failed."
+              exit "$SSH_EXIT_CODE"
+          fi

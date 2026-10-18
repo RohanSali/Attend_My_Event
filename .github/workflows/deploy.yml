@@ -213,10 +213,22 @@ jobs:
 
           echo "Container deployment command completed."
 
+          echo "========== STEP 4: VALIDATE NGINX =========="
+
+          docker compose -f compose.prod.yaml exec -T --interactive=false proxy nginx -t
+          NGINX_TEST_EXIT_CODE=$?
+
+          echo "Nginx validation command returned: $NGINX_TEST_EXIT_CODE"
+          echo "MARKER 1: Nginx configuration validation completed."
+
+          if [ "$NGINX_TEST_EXIT_CODE" -ne 0 ]; then
+              echo "ERROR: Nginx configuration validation failed."
+              exit "$NGINX_TEST_EXIT_CODE"
+          fi
 
           echo "========== STEP 5: RELOAD NGINX =========="
 
-          docker compose -f compose.prod.yaml exec -T proxy nginx -s reload
+          docker compose -f compose.prod.yaml exec -T --interactive=false proxy nginx -s reload
 
           echo "MARKER 2: Nginx reload command returned."
 

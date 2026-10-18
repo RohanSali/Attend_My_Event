@@ -338,24 +338,6 @@ jobs:
           echo "Deployed commit: $IMAGE_TAG"
           echo "=================================================="
           REMOTE
-          set +e
+              } | ssh attend-my-event-server "bash -s"
 
-          {
-              printf 'export IMAGE_PREFIX=%q\n' "$IMAGE_PREFIX"
-              printf 'export IMAGE_TAG=%q\n' "$IMAGE_TAG"
-              printf 'export GHCR_USER=%q\n' "$GHCR_USER"
-              printf 'export GHCR_TOKEN=%q\n' "$GHCR_TOKEN"
-
-              cat <<'REMOTE'
-          # Keep your complete existing remote script here.
-          REMOTE
-          } | ssh attend-my-event-server "bash -s"
-
-          SSH_EXIT_CODE=$?
-
-          echo "Remote SSH deployment exited with code: $SSH_EXIT_CODE"
-
-          if [ "$SSH_EXIT_CODE" -ne 0 ]; then
-              echo "ERROR: Remote deployment failed."
-              exit "$SSH_EXIT_CODE"
-          fi
+              echo "Remote SSH deployment completed successfully."

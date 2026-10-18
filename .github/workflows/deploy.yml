@@ -11,11 +11,15 @@ permissions:
   contents: read
   packages: write
 
+# Prevent simultaneous production deployments.
 concurrency:
   group: production-deployment
   cancel-in-progress: false
 
 jobs:
+  # ============================================================
+  # JOB 1: BUILD AND PUSH DOCKER IMAGES
+  # ============================================================
   build:
     name: Build and Push Images
     runs-on: ubuntu-latest
@@ -63,12 +67,18 @@ jobs:
             ${{ steps.image.outputs.prefix }}/backend:${{ github.sha }}
             ${{ steps.image.outputs.prefix }}/backend:latest
 
+  # ============================================================
+  # JOB 2: DEPLOY TO UBUNTU SERVER
+  # ============================================================
   deploy:
     name: Deploy to Ubuntu Server
     runs-on: ubuntu-latest
     needs: build
 
     steps:
+      # --------------------------------------------------------
+      # Install Cloudflare Tunnel client
+      # --------------------------------------------------------
       - name: Install cloudflared
         shell: bash
         run: |
@@ -82,6 +92,9 @@ jobs:
 
           cloudflared --version
 
+      # --------------------------------------------------------
+      # Configure SSH
+      # --------------------------------------------------------
       - name: Configure SSH
         shell: bash
         env:
@@ -101,7 +114,7 @@ jobs:
 
           # Require a trusted server host key.
           if [[ -z "$SERVER_HOST_KEY" ]]; then
-            echo "SERVER_HOST_KEY secret is missing."
+            echo "ERROR: SERVER_HOST_KEY secret is missing."
             exit 1
           fi
 
@@ -127,6 +140,11 @@ jobs:
 
           chmod 600 "$HOME/.ssh/config"
 
+          echo "SSH configuration completed."
+
+      # --------------------------------------------------------
+      # Deploy application
+      # --------------------------------------------------------
       - name: Deploy to Ubuntu server
         shell: bash
         env:
@@ -140,14 +158,22 @@ jobs:
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
 
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
 
           # cloudflared reads the service token from its environment.
           export TUNNEL_SERVICE_TOKEN_ID="$CF_ACCESS_CLIENT_ID"
           export TUNNEL_SERVICE_TOKEN_SECRET="$CF_ACCESS_CLIENT_SECRET"
 
-          # Send deployment variables over SSH stdin rather than
-          # placing the GHCR token in the remote command arguments.
+          # Never trace commands that contain credentials.
+          set +x
+
+          echo "=================================================="
+          echo "Starting Attend My Event deployment"
+          echo "Commit: $IMAGE_TAG"
+          echo "=================================================="
+
+          # Pass variables through SSH stdin, rather than placing
+          # the GHCR token in the remote command arguments.
           {
             printf 'export IMAGE_PREFIX=%q\n' "$IMAGE_PREFIX"
             printf 'export IMAGE_TAG=%q\n' "$IMAGE_TAG"
@@ -155,40 +181,53 @@ jobs:
             printf 'export GHCR_TOKEN=%q\n' "$GHCR_TOKEN"
 
             cat <<'REMOTE'
-          set -euo pipefail
+          set -Eeuo pipefail
 
           cd /home/rohan/projects/attend-my-event
 
-          # Log in as the same Linux user that runs Docker Compose.
+          # Disable tracing while credentials are in use.
+          set +x
+
+          echo "========== STEP 1: REGISTRY LOGIN =========="
+
           echo "$GHCR_TOKEN" |
             docker login ghcr.io \
               --username "$GHCR_USER" \
               --password-stdin
 
+          echo "Registry login successful."
+
           # Supply the image configuration to Compose.
           export GHCR_IMAGE_PREFIX="$IMAGE_PREFIX"
           export IMAGE_TAG="$IMAGE_TAG"
 
-          # Pull the images built by this workflow.
+          echo "========== STEP 2: PULL IMAGES =========="
+
           docker compose -f compose.prod.yaml pull
 
-          # Deploy the updated containers.
+          echo "Image pull completed."
+
+          echo "========== STEP 3: UPDATE CONTAINERS =========="
+
           docker compose -f compose.prod.yaml up -d --remove-orphans
 
-          # Validate the Nginx configuration before reloading.
-          echo "Validating Nginx configuration..."
+          echo "Container deployment command completed."
+
+          echo "========== STEP 4: VALIDATE NGINX =========="
+
           docker compose -f compose.prod.yaml exec -T proxy nginx -t
 
-          # Reload Nginx so it picks up the current upstream addresses.
-          echo "Reloading application Nginx..."
+          echo "MARKER 1: Nginx configuration validation completed."
+
+          echo "========== STEP 5: RELOAD NGINX =========="
+
           docker compose -f compose.prod.yaml exec -T proxy nginx -s reload
 
-          echo "Nginx reload command completed."
+          echo "MARKER 2: Nginx reload command returned."
 
+          echo "========== STEP 6: VERIFY HOMEPAGE =========="
 
-          # Verify that the application proxy is responding.
-          echo "Checking application homepage..."
-
+          # Retry transient startup failures.
           curl --fail --silent --show-error \
             --retry 5 \
             --retry-delay 2 \
@@ -197,10 +236,9 @@ jobs:
             http://127.0.0.1:8083/ \
             -o /dev/null
 
-          echo "Homepage check passed."
+          echo "MARKER 3: Homepage health check passed."
 
-          # Verify that the backend is reachable through the application proxy.
-          echo "Checking backend API..."
+          echo "========== STEP 7: VERIFY BACKEND API =========="
 
           curl --fail --silent --show-error \
             --retry 5 \
@@ -210,14 +248,87 @@ jobs:
             http://127.0.0.1:8083/api/ \
             -o /dev/null
 
-          echo "Backend API check passed."
+          echo "MARKER 4: Backend API health check passed."
 
-          # Remove unused Docker images
+          echo "========== STEP 8: CLEAN OLD APPLICATION IMAGES =========="
+
+          # Remove unused application images while preserving the
+          # five newest tagged versions of each application image.
+          #
+          # Running containers are not removed by this procedure.
+          # The currently deployed image is also retained.
+
+          cleanup_old_images() {
+            local repository="$1"
+            local keep=5
+
+            echo "Checking image repository: $repository"
+
+            # List image IDs and tags, newest first.
+            # The newest five distinct image IDs are retained.
+            mapfile -t image_ids < <(
+              docker image ls \
+                "$repository" \
+                --format '{{.ID}} {{.Tag}} {{.CreatedAt}}' |
+                sort -k3,4r |
+                awk '!seen[$1]++ { print $1 }'
+            )
+
+            local count="${#image_ids[@]}"
+
+            echo "Found $count image versions for $repository."
+
+            if (( count <= keep )); then
+              echo "No old image versions need removal."
+              return 0
+            fi
+
+            # Keep the newest five images and inspect the remainder.
+            for image_id in "${image_ids[@]:keep}"; do
+
+              # Never remove an image used by an existing container.
+              if docker ps -a --format '{{.Image}} {{.ID}}' |
+                while read -r container_image container_id; do
+                  docker inspect \
+                    --format '{{.Image}}' "$container_id" 2>/dev/null || true
+                done |
+                grep -Fxq "$image_id"; then
+
+                echo "Skipping image $image_id because a container references it."
+                continue
+              fi
+
+              echo "Removing old unused image: $image_id"
+
+              # If Docker refuses to remove the image, report the
+              # failure rather than silently pretending it succeeded.
+              docker image rm "$image_id"
+            done
+          }
+
+          cleanup_old_images \
+            "${GHCR_IMAGE_PREFIX}/frontend"
+
+          cleanup_old_images \
+            "${GHCR_IMAGE_PREFIX}/backend"
+
+          echo "MARKER 5: Application image cleanup completed."
+
+          echo "========== STEP 9: REMOVE DANGLING IMAGES =========="
+
           docker image prune -f
 
-          # Remove saved registry credentials after deployment.
+          echo "MARKER 6: Dangling image cleanup completed."
+
+          echo "========== STEP 10: REGISTRY LOGOUT =========="
+
           docker logout ghcr.io
 
-          echo "Attend My Event deployment completed."
+          echo "MARKER 7: GHCR logout completed."
+
+          echo "=================================================="
+          echo "Attend My Event deployment completed successfully."
+          echo "Deployed commit: $IMAGE_TAG"
+          echo "=================================================="
           REMOTE
           } | ssh attend-my-event-server "bash -s"

@@ -1,2 +1,5 @@
 fastapi[standard]
 firebase-admin
+python-dotenv
+python-dotenv
+firebase-admin

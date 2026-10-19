@@ -1,43 +1,48 @@
 import os
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from api.events import router as events_router
-from api.ideas import router as ideas_router
-from database import initialize_database
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
-    initialize_database()
-    yield
-
+from app.api.v1.router import api_v1_router
+from app.api.v1.routes.events import router as events_direct_router
+from app.api.v1.routes.health import router as health_direct_router
+from app.api.v1.routes.users import router as users_direct_router
 
 app = FastAPI(
     title="AttendMyEvent API",
-    version="1.0.0",
-    lifespan=lifespan,
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
+
+allowed_origins_env = os.getenv("CORS_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000")
+origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:5173")],
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_origins=origins if "*" not in origins else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-app.include_router(events_router)
-app.include_router(ideas_router)
+# Standard API v1 routes
+app.include_router(api_v1_router)
+
+# Direct aliases for Vite / Nginx proxy rewrites (where /api prefix is stripped)
+app.include_router(events_direct_router)
+app.include_router(users_direct_router)
+app.include_router(health_direct_router)
+
+# Direct /api aliases (for setups where /api is not rewritten)
+app.include_router(events_direct_router, prefix="/api")
+app.include_router(users_direct_router, prefix="/api")
+app.include_router(health_direct_router, prefix="/api")
 
 
 @app.get("/")
-def home() -> dict[str, str]:
-    return {"message": "AttendMyEvent API is running."}
+def home() -> dict:
+    return {"message": "AttendMyEvent API is running.", "version": "2.0.0"}
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"success": "ok"}
+def health() -> dict:
+    return {"status": "ok"}

@@ -1,135 +1,86 @@
-import { useEffect, useMemo, useState } from 'react'
-import { createEvent, getEvents } from './api/events.js'
-import CreateEventForm from './components/CreateEventForm.jsx'
-import EventsSection from './components/EventsSection.jsx'
-import Footer from './components/Footer.jsx'
-import Navbar from './components/Navbar.jsx'
-import WelcomeBanner from './components/WelcomeBanner.jsx'
-import { CATEGORIES, EMPTY_EVENT_FORM } from './constants/events.js'
-import { sortEvents } from './utils/events.js'
+import { useState } from "react";
+import { useAuth } from "./contexts/AuthContext";
+import { useGeolocation } from "./hooks/useGeolocation";
+import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
+import LandingPage from "./components/LandingPage";
+import DashboardPage from "./components/DashboardPage";
+import HostEventModal from "./components/HostEventModal";
 
 function App() {
-  const [events, setEvents] = useState([])
-  const [form, setForm] = useState(EMPTY_EVENT_FORM)
-  const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('All categories')
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const [loadError, setLoadError] = useState('')
-  const [notice, setNotice] = useState('')
+  const { user, loading } = useAuth();
+  const { coords: userCoords, isExact: isExactLocation } = useGeolocation();
+  const [isHostModalOpen, setIsHostModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
-  useEffect(() => {
-    let isMounted = true
-
-    getEvents()
-      .then((loadedEvents) => {
-        if (isMounted) setEvents(loadedEvents)
-      })
-      .catch((requestError) => {
-        if (isMounted) {
-          setLoadError(requestError instanceof Error ? requestError.message : 'Could not load events.')
-        }
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false)
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
-  const visibleEvents = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return events.filter((event) => {
-      const matchesCategory = category === 'All categories' || event.category === category
-      const matchesSearch =
-        !query ||
-        `${event.title} ${event.category} ${event.venue} ${event.description}`
-          .toLowerCase()
-          .includes(query)
-      return matchesCategory && matchesSearch
-    })
-  }, [category, events, search])
-
-  async function refreshEvents() {
-    setIsLoading(true)
-    setLoadError('')
-    try {
-      setEvents(await getEvents())
-    } catch (requestError) {
-      setLoadError(requestError instanceof Error ? requestError.message : 'Could not load events.')
-    } finally {
-      setIsLoading(false)
-    }
+  function showToast(msg) {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 4000);
   }
 
-  function updateForm(event) {
-    const { name, value } = event.target
-    setForm((current) => ({ ...current, [name]: value }))
-  }
-
-  async function submitEvent(event) {
-    event.preventDefault()
-    setError('')
-    setNotice('')
-    setIsSubmitting(true)
-
-    try {
-      const newEvent = await createEvent({
-        ...form,
-        starts_at: new Date(form.starts_at).toISOString(),
-        ends_at: new Date(form.ends_at).toISOString(),
-      })
-      setEvents((current) => sortEvents([...current, newEvent]))
-      setLoadError('')
-      setForm(EMPTY_EVENT_FORM)
-      setNotice('Your event is on the list. See you there!')
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Could not publish your event.')
-    } finally {
-      setIsSubmitting(false)
-    }
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#f6f8fb]">
+        <div className="grid size-12 place-items-center rounded-[14px_14px_14px_4px] bg-[#2f6f96] text-3xl font-bold tracking-[-3px] text-white animate-pulse mb-3">
+          a
+        </div>
+        <p className="text-xs font-semibold text-[#17324d] tracking-wider uppercase">
+          Loading AttendMyEvent...
+        </p>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen min-w-[320px] bg-[#f6f8fb] font-sans antialiased">
-      <div className="mx-auto w-[calc(100%-2rem)] max-w-[1180px] text-[#17212b] sm:w-[calc(100%-2.5rem)]">
-        <Navbar />
-        <main>
-          <WelcomeBanner />
-          <section
-            className="my-9 grid items-start gap-7 max-[850px]:grid-cols-[minmax(0,1fr)_310px] max-[850px]:gap-[18px] max-[680px]:grid-cols-1 max-[680px]:gap-3 max-[680px]:my-7"
-            id="explore"
-            aria-label="Explore and create events"
-          >
-            <EventsSection
-              events={events}
-              visibleEvents={visibleEvents}
-              search={search}
-              category={category}
-              isLoading={isLoading}
-              loadError={loadError}
-              onSearchChange={setSearch}
-              onCategoryChange={setCategory}
-              onRefresh={refreshEvents}
+    <div className="min-h-screen min-w-[320px] bg-[#f6f8fb] text-[#17212b] font-sans antialiased flex flex-col">
+      {/* Toast Alert */}
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-50 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xl animate-in slide-in-from-top duration-200">
+          {toastMessage}
+        </div>
+      )}
+
+      {/* Main Page Container */}
+      <div className="mx-auto w-[calc(100%-2rem)] max-w-[1240px] flex-1 flex flex-col sm:w-[calc(100%-2.5rem)]">
+        {/* Navigation Bar */}
+        <Navbar
+          onOpenHostModal={() => setIsHostModalOpen(true)}
+          onNavigateSection={(section) => {
+            const el = document.getElementById(section);
+            if (el) el.scrollIntoView({ behavior: "smooth" });
+          }}
+        />
+
+        {/* Main Content: Landing Page when NOT logged in, Dashboard Page when logged in */}
+        <main className="flex-1">
+          {user ? (
+            <DashboardPage
+              userCoords={userCoords}
+              isExactLocation={isExactLocation}
+              onOpenHostModal={() => setIsHostModalOpen(true)}
             />
-            <CreateEventForm
-              form={form}
-              categories={CATEGORIES}
-              isSubmitting={isSubmitting}
-              error={error}
-              notice={notice}
-              onChange={updateForm}
-              onSubmit={submitEvent}
-            />
-          </section>
+          ) : (
+            <LandingPage onAuthSuccess={() => showToast("Welcome to AttendMyEvent!")} />
+          )}
         </main>
+
+        {/* Global Footer */}
         <Footer />
       </div>
+
+      {/* Host Event Modal */}
+      <HostEventModal
+        isOpen={isHostModalOpen}
+        onClose={() => setIsHostModalOpen(false)}
+        userCoords={userCoords}
+        onEventCreated={() => {
+          showToast("🎉 Event published successfully! It's now live on the map.");
+          // Trigger reload if on dashboard
+          window.dispatchEvent(new Event("event-created"));
+        }}
+      />
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

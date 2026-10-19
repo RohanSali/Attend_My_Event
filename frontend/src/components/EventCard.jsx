@@ -1,34 +1,114 @@
-import { formatEventDate } from '../utils/events.js'
+import { getEventStatus, getStatusLabel, getStatusBadgeClasses } from "../utils/eventStatus";
+import { formatEventRange } from "../utils/date";
+import { calculateDistanceKm, formatDistance } from "../utils/distance";
 
-function EventCard({ event }) {
+export default function EventCard({
+  event,
+  isSelected,
+  userCoords,
+  onSelect,
+  onFocusMap,
+}) {
+  const status = getEventStatus(event);
+  const statusLabel = getStatusLabel(event);
+  const badgeClasses = getStatusBadgeClasses(status);
+
+  const distanceKm =
+    userCoords?.lat && userCoords?.lng && event.location?.lat && event.location?.lng
+      ? calculateDistanceKm(
+          userCoords.lat,
+          userCoords.lng,
+          event.location.lat,
+          event.location.lng
+        )
+      : null;
+
+  const distanceText = formatDistance(distanceKm);
+
   return (
-    <article className="rounded-[9px] border border-[#dce3ea] bg-white px-[18px] py-4 transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-[#b9d0df] hover:shadow-[0_6px_18px_rgb(30_53_73_/_5%)]">
-      <div className="flex items-center justify-between gap-2.5 max-[420px]:items-start max-[420px]:flex-col max-[420px]:gap-[5px]">
-        <span className="inline-flex items-center gap-[7px] text-[10px] font-bold text-[#2f6f96]">
-          <span className="size-[7px] rounded-full bg-[#f4a340]" aria-hidden="true" />
-          {event.category}
-        </span>
-        <span className="text-right text-[10px] font-medium text-[#67788a] max-[420px]:text-left">
-          {formatEventDate(event.starts_at)}
+    <article
+      onClick={() => onSelect?.(event)}
+      tabIndex={0}
+      role="button"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect?.(event);
+        }
+      }}
+      className={`group relative rounded-xl border bg-white p-4 transition-all duration-150 cursor-pointer text-left ${
+        isSelected
+          ? "border-[#2f6f96] ring-2 ring-[#2f6f96]/20 shadow-md bg-sky-50/20"
+          : "border-[#dce3ea] hover:border-[#b9d0df] hover:shadow-sm"
+      }`}
+    >
+      {/* Category, Distance & Status Badge */}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#2f6f96]">
+            {event.category || "Community"}
+          </span>
+          {distanceText && (
+            <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+              📍 {distanceText}
+            </span>
+          )}
+        </div>
+        <span
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border tracking-wide uppercase ${badgeClasses}`}
+        >
+          {status === "live" && (
+            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          )}
+          {statusLabel}
         </span>
       </div>
-      <h3 className="mt-[11px] mb-[7px] text-base font-semibold tracking-[-0.25px] text-[#243a50]">
+
+      {/* Event Title */}
+      <h3 className="text-sm sm:text-base font-semibold text-[#17324d] leading-snug tracking-tight mb-1.5 group-hover:text-[#2f6f96] transition-colors line-clamp-2">
         {event.title}
       </h3>
-      <p className="m-0 flex items-center gap-1.5 text-xs text-[#576c7f]">
-        <span className="text-base text-[#c58229]" aria-hidden="true">⌖</span>
-        {event.venue}
+
+      {/* Location / Venue */}
+      <p className="flex items-center gap-1.5 text-xs text-[#576c7f] mb-1.5">
+        <span className="text-[#c58229] shrink-0" aria-hidden="true">
+          ⌖
+        </span>
+        <span className="truncate">{event.venue_name || "Location not specified"}</span>
       </p>
+
+      {/* Date & Time */}
+      <p className="text-[11px] font-medium text-[#788898] mb-2.5">
+        🗓 {formatEventRange(event.start_at, event.end_at)}
+      </p>
+
+      {/* Excerpt / description preview */}
       {event.description && (
-        <p className="mt-[11px] mb-[3px] wrap-anywhere text-xs leading-[1.55] text-[#667687]">
-          {event.description}
+        <p className="text-xs text-[#667687] leading-relaxed line-clamp-2 mb-3 bg-[#f8fafc] p-2 rounded-lg border border-slate-100">
+          {event.description.replace(/<[^>]*>/g, "")}
         </p>
       )}
-      <p className="mt-[9px] mb-0 text-[10px] text-[#8996a3]">
-        Until {formatEventDate(event.ends_at)}
-      </p>
-    </article>
-  )
-}
 
-export default EventCard
+      {/* Actions */}
+      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+        <span className="text-[10px] font-medium text-[#8996a3]">
+          By {event.host_name || "Host"}
+        </span>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFocusMap?.(event);
+            }}
+            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-[#556575] hover:bg-[#eef2f6] hover:text-[#17324d] transition-colors border border-[#dce3ea]"
+            title="Focus on map"
+          >
+            <span>🗺 View on Map</span>
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}

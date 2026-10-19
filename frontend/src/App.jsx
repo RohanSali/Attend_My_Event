@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createEvent, getEvents } from './api/events.js'
 import CreateEventForm from './components/CreateEventForm.jsx'
-import EventIdeaCard from './components/EventIdeaCard.jsx'
 import EventsSection from './components/EventsSection.jsx'
-import SiteFooter from './components/SiteFooter.jsx'
-import SiteHeader from './components/SiteHeader.jsx'
+import Footer from './components/Footer.jsx'
+import Navbar from './components/Navbar.jsx'
 import WelcomeBanner from './components/WelcomeBanner.jsx'
 import { CATEGORIES, EMPTY_EVENT_FORM } from './constants/events.js'
 import { sortEvents } from './utils/events.js'
-import TempCompo from './components/TempCompo.jsx'
 
 function App() {
   const [events, setEvents] = useState([])
@@ -98,11 +96,9 @@ function App() {
   return (
     <div className="min-h-screen min-w-[320px] bg-[#f6f8fb] font-sans antialiased">
       <div className="mx-auto w-[calc(100%-2rem)] max-w-[1180px] text-[#17212b] sm:w-[calc(100%-2.5rem)]">
-        <SiteHeader />
+        <Navbar />
         <main>
-          <TempCompo />
           <WelcomeBanner />
-          <EventIdeaCard />
           <section
             className="my-9 grid items-start gap-7 max-[850px]:grid-cols-[minmax(0,1fr)_310px] max-[850px]:gap-[18px] max-[680px]:grid-cols-1 max-[680px]:gap-3 max-[680px]:my-7"
             id="explore"
@@ -130,7 +126,7 @@ function App() {
             />
           </section>
         </main>
-        <SiteFooter />
+        <Footer />
       </div>
     </div>
   )

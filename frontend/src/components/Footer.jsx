@@ -1,4 +1,4 @@
-function SiteFooter() {
+function Footer() {
   return (
     <footer className="flex min-h-[68px] items-center justify-between border-t border-[#dce3ea] text-[10px] text-[#788694]">
       <a className="inline-flex items-center gap-[9px] text-[13px] font-bold tracking-[-0.7px] text-[#52677b]" href="#">
@@ -15,4 +15,4 @@ function SiteFooter() {
   )
 }
 
-export default SiteFooter
+export default Footer

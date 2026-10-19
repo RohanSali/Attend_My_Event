@@ -1,4 +1,4 @@
-function SiteHeader() {
+function Navbar() {
   return (
     <header className="flex h-[78px] items-center border-b border-[#dce3ea] max-[680px]:h-[66px]">
       <a
@@ -28,4 +28,4 @@ function SiteHeader() {
   )
 }
 
-export default SiteHeader
+export default Navbar

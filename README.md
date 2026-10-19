@@ -4,7 +4,7 @@
 
 AttendMyEvent is a location-aware event discovery and invitation web application. People can publish events with venue, schedule, visibility, registration instructions, and optional host-provided fee/payment information. Other users can discover eligible public events through a map and event list, inspect event status, open details, and navigate to a venue.
 
-> **Project status:** A first working slice is implemented: visitors can browse, search, and filter events, and hosts can publish an event through the UI. FastAPI validates event details and saves them to a local SQLite database. Authentication, maps, registration, and the larger features described below are not implemented yet.
+> **Project status:** The application uses Firebase Authentication and Cloud Firestore, with a FastAPI backend and a React/Vite frontend. Signed-in users can manage profiles and host events; visitors can discover events through the map and event list.
 
 ## Contents
 
@@ -19,6 +19,7 @@ AttendMyEvent is a location-aware event discovery and invitation web application
 - [Local setup](#local-setup)
 - [Running the application](#running-the-application)
 - [Firebase and Firestore setup](#firebase-and-firestore-setup)
+- [Production deployment](#production-deployment)
 - [Implemented API](#implemented-api)
 - [Future API scope](#future-api-scope)
 - [Data and file-storage notes](#data-and-file-storage-notes)
@@ -76,11 +77,11 @@ Hosts can create an event in a flexible editor. The product keeps core discovery
 |---|---|---|
 | Frontend | ReactJS + Vite + Tailwind CSS | Pages, reusable components, responsive layouts and styling |
 | Backend | FastAPI (Python) | API, validation, authorization, business logic |
-| Authentication | Not implemented yet; Firebase Authentication is a future option | User sign-in and identity |
-| Database | SQLite for the current event prototype; Cloud Firestore is a future option | Event records |
-| Map | Not implemented yet | Map display, markers, focusing and directions |
-| Geocoding | To be selected | Address-to-coordinate conversion |
-| File storage | To be confirmed | Event images, profile photos, payment QR images |
+| Authentication | Firebase Authentication | User sign-in and identity |
+| Database | Cloud Firestore | User profiles and event records |
+| Map | Leaflet | Event markers, user location and map navigation |
+| Geocoding | Not configured | Venue coordinates are provided with events |
+| File storage | Not configured | Event cover-image upload is not enabled |
 | Local folder | `data/` | Development data or explicitly documented local files |
 
 ## Tailwind CSS: where styles belong
@@ -381,10 +382,10 @@ Use the Python executable and package manager for the intended virtual environme
 
 Vite exposes variables prefixed with `VITE_` to browser code. Only place values here that are safe to expose publicly, such as Firebase web-app configuration and a public map key restricted by provider settings.
 
-Example `frontend/.env.example`:
+Copy `frontend/.env.example` to `frontend/.env`, then configure it:
 
 ```dotenv
-VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1
+VITE_API_BASE_URL=/api
 
 # Firebase web app configuration (public client configuration;
 # secure access through Authentication and Firestore Rules).
@@ -394,36 +395,21 @@ VITE_FIREBASE_PROJECT_ID=
 VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
-
-# Set only after selecting a provider.
-VITE_MAP_PROVIDER=
-VITE_MAP_PUBLIC_KEY=
+VITE_FIREBASE_MEASUREMENT_ID=
 ```
 
-Copy to `.env` and fill in the values from the Firebase console and chosen map provider. Variable names must match the actual application code.
+Fill in the Firebase web-app values from the Firebase console. The same file is read by Vite during local development and by the frontend Docker build. Set `VITE_API_BASE_URL=/api` when using the included proxy.
 
 ### Backend environment
 
-Example `backend/.env.example`:
+Copy `backend/.env.example` to `backend/.env`, then configure it:
 
 ```dotenv
-APP_NAME=AttendMyEvent API
-APP_ENV=development
-API_V1_PREFIX=/api/v1
-HOST=127.0.0.1
-PORT=8000
-CORS_ORIGINS=http://localhost:5173
-
-FIREBASE_PROJECT_ID=
-# Configure Firebase Admin credentials using the method selected for your
-# environment (application default credentials or a protected service account).
-# Do not commit a service-account JSON file.
-
-# Configure map/geocoding secrets here only if server-side calls require them.
-MAPS_SERVER_API_KEY=
+CORS_ORIGIN=http://localhost:5173
+GOOGLE_APPLICATION_CREDENTIALS=service-account.json
 ```
 
-The backend settings implementation must load and validate these variables. Do not assume every variable exists in the current codebase until it has been implemented.
+Keep the Firebase Admin service-account file at `backend/service-account.json` locally and out of version control. Compose mounts it read-only into the backend container. The root `.env` file is not needed: Compose reads backend settings from `backend/.env`, while Vite and the frontend Docker build read `frontend/.env`.
 
 ### `.gitignore` checklist
 
@@ -490,7 +476,7 @@ From `backend/`, with the virtual environment active:
 uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The API stores events in `backend/events.sqlite3`. Set `EVENT_DATABASE_PATH` to use another SQLite file. `CORS_ORIGINS` accepts a comma-separated list of allowed frontend origins; its default allows the local Vite server.
+The backend reads and writes events and profiles in Cloud Firestore. When running outside Docker Compose, provide `GOOGLE_APPLICATION_CREDENTIALS` and `CORS_ORIGIN` in the backend environment. `CORS_ORIGIN` accepts a comma-separated list of allowed frontend origins; its default allows the local Vite server.
 
 Available endpoints:
 - Health: `http://127.0.0.1:8000/health`
@@ -506,7 +492,7 @@ cd frontend
 npm run dev
 ```
 
-Vite proxies API and health requests to `http://127.0.0.1:8000`. When serving the frontend separately from the backend, set `VITE_API_BASE_URL` to the API origin and set the backend's `CORS_ORIGINS` to include the frontend origin.
+Vite proxies API and health requests to `http://127.0.0.1:8000`. When serving the frontend separately from the backend, set `VITE_API_BASE_URL` to the API origin and set the backend's `CORS_ORIGIN` to include the frontend origin.
 
 ---
 
@@ -518,7 +504,7 @@ For day-to-day development, run the frontend and backend in separate terminals.
 ```bash
 cd backend
 # Activate .venv first
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+uvicorn main:app --reload --env-file .env --host 127.0.0.1 --port 8000
 ```
 
 **Terminal B — Frontend**
@@ -600,6 +586,33 @@ This is a proposal, not a claim that these collections already exist. Confirm qu
 - Enforce public/private/draft visibility.
 - Protect registrations and notifications so users can access only their own data, with a defined exception for the relevant event host.
 - Remember that privileged Firebase Admin SDK operations bypass Firestore Security Rules; backend authorization is therefore essential.
+
+---
+
+## Production deployment
+
+Pushing to `main` builds and publishes the frontend and backend images to GitHub Container Registry, then deploys them to the configured Ubuntu server using `compose.prod.yaml`.
+
+Configure these repository-level **Actions variables** for the frontend image build:
+
+- `VITE_API_BASE_URL` — `/api` when using the included Nginx reverse proxy, or the full API URL if the API is hosted separately.
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+- `VITE_FIREBASE_MEASUREMENT_ID` (optional)
+
+These frontend values are bundled into the frontend image. Firebase web-app configuration is public; do not put Firebase Admin credentials in frontend variables.
+
+Configure these repository **Actions secrets**:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON` — the complete Firebase Admin service-account JSON. The workflow transfers it over SSH into a mode-restricted file under the deployment user's home directory and mounts it read-only in the backend container.
+- `SERVER_SSH_KEY` and `SERVER_HOST_KEY` — deployment SSH identity and pinned host key.
+- `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` — Cloudflare Access service token.
+
+The deployment server must have the repository checked out at `/home/rohan/projects/attend-my-event`, Docker Compose installed, and `backend/.env` for backend runtime configuration (for example, `CORS_ORIGIN`). If the server currently has these settings in a root `.env`, move the backend settings to `backend/.env` before deploying. The workflow supplies the GHCR image and Firebase credential path at deployment time. Never commit the server `.env` or service-account JSON.
 
 ---
 

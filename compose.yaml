@@ -13,13 +13,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
     expose:
       - "8000"
     environment:
-      EVENT_DATABASE_PATH: /app/data/events.sqlite3
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-service-account.json
     volumes:
-      - backend_data:/app/data
+      - ${FIREBASE_SERVICE_ACCOUNT_PATH:-./backend/service-account.json}:/run/secrets/firebase-service-account.json:ro
     restart: unless-stopped
-
-volumes:
-  backend_data:

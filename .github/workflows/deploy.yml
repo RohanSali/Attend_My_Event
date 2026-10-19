@@ -46,11 +46,47 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate frontend configuration
+        shell: bash
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+        run: |
+          set -euo pipefail
+
+          for variable in \
+            VITE_API_BASE_URL \
+            VITE_FIREBASE_API_KEY \
+            VITE_FIREBASE_AUTH_DOMAIN \
+            VITE_FIREBASE_PROJECT_ID \
+            VITE_FIREBASE_STORAGE_BUCKET \
+            VITE_FIREBASE_MESSAGING_SENDER_ID \
+            VITE_FIREBASE_APP_ID; do
+            if [[ -z "${!variable}" ]]; then
+              echo "ERROR: GitHub Actions variable $variable is missing."
+              exit 1
+            fi
+          done
+
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: true
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL }}
+            VITE_FIREBASE_API_KEY=${{ vars.VITE_FIREBASE_API_KEY }}
+            VITE_FIREBASE_AUTH_DOMAIN=${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+            VITE_FIREBASE_PROJECT_ID=${{ vars.VITE_FIREBASE_PROJECT_ID }}
+            VITE_FIREBASE_STORAGE_BUCKET=${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+            VITE_FIREBASE_MESSAGING_SENDER_ID=${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+            VITE_FIREBASE_APP_ID=${{ vars.VITE_FIREBASE_APP_ID }}
+            VITE_FIREBASE_MEASUREMENT_ID=${{ vars.VITE_FIREBASE_MEASUREMENT_ID }}
           tags: |
             ${{ steps.image.outputs.prefix }}/frontend:${{ github.sha }}
             ${{ steps.image.outputs.prefix }}/frontend:latest
@@ -130,9 +166,19 @@ jobs:
 
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
 
         run: |
           set -Eeuo pipefail
+
+          if [[ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "ERROR: FIREBASE_SERVICE_ACCOUNT_JSON secret is missing."
+            exit 1
+          fi
+
+          FIREBASE_SERVICE_ACCOUNT_B64="$(
+            printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" | base64 --wrap=0
+          )"
 
           # cloudflared reads the service token from its environment.
           export TUNNEL_SERVICE_TOKEN_ID="$CF_ACCESS_CLIENT_ID"
@@ -149,12 +195,25 @@ jobs:
             printf 'export IMAGE_TAG=%q\n' "$IMAGE_TAG"
             printf 'export GHCR_USER=%q\n' "$GHCR_USER"
             printf 'export GHCR_TOKEN=%q\n' "$GHCR_TOKEN"
+            printf 'export FIREBASE_SERVICE_ACCOUNT_B64=%q\n' "$FIREBASE_SERVICE_ACCOUNT_B64"
 
             cat <<'REMOTE'
           set -Eeuo pipefail
           set +x
 
           cd /home/rohan/projects/attend-my-event
+
+          credentials_dir="$HOME/.config/attend-my-event"
+          mkdir -p "$credentials_dir"
+          chmod 700 "$credentials_dir"
+          credentials_tmp="$(mktemp "$credentials_dir/firebase-service-account.XXXXXX")"
+          trap 'rm -f "$credentials_tmp"' EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_B64" |
+            base64 --decode > "$credentials_tmp"
+          chmod 600 "$credentials_tmp"
+          mv "$credentials_tmp" "$credentials_dir/firebase-service-account.json"
+          trap - EXIT
+          unset FIREBASE_SERVICE_ACCOUNT_B64
 
           echo "Logging in to GitHub Container Registry..."
           echo "$GHCR_TOKEN" |
@@ -164,6 +223,7 @@ jobs:
 
           export GHCR_IMAGE_PREFIX="$IMAGE_PREFIX"
           export IMAGE_TAG
+          export FIREBASE_SERVICE_ACCOUNT_PATH="$credentials_dir/firebase-service-account.json"
 
           echo "Pulling application images..."
           docker compose -f compose.prod.yaml pull
